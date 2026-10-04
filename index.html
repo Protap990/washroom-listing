@@ -30,10 +30,11 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    // Connected to your Supabase project
     const SUPABASE_URL = 'https://uyypecjfolryxmrxyerj.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV5eXBlY2pmb2xyeXhtcnh5ZXJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMDQ0MzQsImV4cCI6MjEwNjY4MDQzNH0.eKmcvnL_s29ulbi5_lLtMVUL0k2wxPqu-27404yoSTI';
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    // FIXED: Renamed to supabaseClient to prevent crashing
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     async function handleAuth(action) {
       const email = document.getElementById('email').value.trim();
@@ -50,33 +51,30 @@
 
       let result;
       if (action === 'signup') {
-        result = await supabase.auth.signUp({ email, password });
+        result = await supabaseClient.auth.signUp({ email, password });
         if (!result.error) {
           msgEl.innerText = "Check your email for a confirmation link, then log in.";
           msgEl.style.color = "green";
           return;
         }
       } else {
-        result = await supabase.auth.signInWithPassword({ email, password });
+        result = await supabaseClient.auth.signInWithPassword({ email, password });
         if (!result.error) {
           msgEl.innerText = "Success! Redirecting...";
           msgEl.style.color = "green";
-          // Redirects to your form page
           window.location.href = 'host-listing-1.html';
           return;
         }
       }
 
-      // Handle Errors
       if (result.error) {
         msgEl.innerText = result.error.message;
         msgEl.style.color = "red";
       }
     }
     
-    // Automatically redirect if the user is already logged in
     async function checkSession() {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await supabaseClient.auth.getSession();
       if (session) {
         window.location.href = 'host-listing-1.html';
       }
