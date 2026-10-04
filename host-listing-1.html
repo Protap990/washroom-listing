@@ -1,84 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Host Registration - Washroom Platform</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 500px; margin: auto; }
-    label { font-weight: bold; margin-top: 10px; display: block; }
-    input, select { width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 15px; box-sizing: border-box; }
-    button { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; font-size: 16px; cursor: pointer; margin-top: 10px; }
-    button:hover { background-color: #004494; }
-    .row { display: flex; gap: 10px; }
-    .row > div { flex: 1; }
-    #status-msg { margin-top: 15px; font-weight: bold; text-align: center; }
-  </style>
-</head>
-<body>
-
-  <h2>Register a Washroom</h2>
-  
-  <form id="f" novalidate>
-    
-    <label for="host_category">I am registering as a:</label>
-    <select id="host_category">
-      <option value="residential">Residential Host (Private Home)</option>
-      <option value="commercial">Commercial Host (Shop, Cafe, Petrol Pump)</option>
-    </select>
-
-    <div id="business_div" hidden>
-      <label for="business_name">Business/Shop Name:</label>
-      <input id="business_name" type="text" placeholder="e.g., Sharma Sweets, Highway Cafe">
-    </div>
-
-    <label for="name">Your full name:</label>
-    <input id="name" type="text" autocomplete="name" required>
-
-    <div class="row">
-      <div>
-        <label for="phone">Mobile number:</label>
-        <input id="phone" type="tel" inputmode="numeric" maxlength="10" placeholder="10 digits" required>
-      </div>
-      <div>
-        <label for="pin">PIN code:</label>
-        <input id="pin" type="text" inputmode="numeric" maxlength="6" required>
-      </div>
-    </div>
-
-    <label for="addr">Full Address:</label>
-    <input id="addr" type="text" required>
-
-    <div class="row">
-      <div>
-        <label for="price">Price (₹):</label>
-        <input id="price" type="number" required>
-      </div>
-      <div>
-        <label for="type">Washroom Type:</label>
-        <select id="type">
-          <option value="Western">Western</option>
-          <option value="Indian">Indian</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="row">
-      <div>
-        <label for="open">Opening Time:</label>
-        <input id="open" type="time" required>
-      </div>
-      <div>
-        <label for="close">Closing Time:</label>
-        <input id="close" type="time" required>
-      </div>
-    </div>
-
-    <button type="submit" id="submit-btn">Submit Registration</button>
-    <div id="status-msg"></div>
-
-  </form>
-
   <!-- Supabase Library -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
@@ -104,6 +23,18 @@
       submitBtn.innerText = "Saving to database...";
       statusMsg.innerText = "";
 
+      // 1. Fetch the currently logged-in user's secure ID for the host_id column
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+      
+      if (authError || !user) {
+        statusMsg.innerText = "Error: You must be logged in to register a washroom.";
+        statusMsg.style.color = 'red';
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Submit Registration";
+        return;
+      }
+
+      // 2. Package the form data PLUS the required default database values
       const formData = {
         host_category: $('host_category').value,
         business_name: $('business_name').value.trim(),
@@ -114,7 +45,14 @@
         price: Number($('price').value),
         type: $('type').value,
         open: $('open').value,
-        close: $('close').value
+        close: $('close').value,
+        
+        // --- INJECTING DATA FOR REQUIRED COLUMNS ---
+        host_id: user.id,            // The unique Supabase ID of the logged-in host
+        who: 'all',                  // Default text
+        facilities: [],              // Default empty array for text[]
+        kyc_verified: false,         // Default boolean
+        status: 'pending'            // Default text
       };
 
       if (formData.host_category === 'commercial' && formData.business_name.length < 2) {
@@ -125,7 +63,7 @@
         return;
       }
 
-      // Insert data into Supabase
+      // 3. Insert data into Supabase
       const { data, error } = await supabaseClient
         .from('listings')
         .insert([formData]);
@@ -144,6 +82,4 @@
       submitBtn.innerText = "Submit Registration";
     });
   </script>
-
-</body>
-</html>
+  
