@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Host Registration - Washroom Platform</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 500px; margin: auto; }
+    label { font-weight: bold; margin-top: 10px; display: block; }
+    input, select { width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 15px; box-sizing: border-box; }
+    button { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; font-size: 16px; cursor: pointer; }
+    .row { display: flex; gap: 10px; }
+    .row > div { flex: 1; }
+  </style>
+</head>
+<body>
+
+  <h2>Register a Washroom</h2>
+  
+  <form id="f" novalidate>
+    
+    <!-- Host Category Selection -->
+    <label for="host_category">I am registering as a:</label>
+    <select id="host_category">
+      <option value="residential">Residential Host (Private Home)</option>
+      <option value="commercial">Commercial Host (Shop, Cafe, Petrol Pump)</option>
+    </select>
+
+    <!-- Business Name (Hidden by default) -->
+    <div id="business_div" hidden>
+      <label for="business_name">Business/Shop Name:</label>
+      <input id="business_name" type="text" placeholder="e.g., Sharma Sweets, Highway Cafe">
+    </div>
+
+    <!-- Personal Details -->
+    <label for="name">Your full name:</label>
+    <input id="name" type="text" autocomplete="name" required>
+
+    <div class="row">
+      <div>
+        <label for="phone">Mobile number:</label>
+        <input id="phone" type="tel" inputmode="numeric" maxlength="10" placeholder="10 digits" required>
+      </div>
+      <div>
+        <label for="pin">PIN code:</label>
+        <input id="pin" type="text" inputmode="numeric" maxlength="6" required>
+      </div>
+    </div>
+
+    <!-- Washroom Details -->
+    <label for="addr">Full Address:</label>
+    <input id="addr" type="text" required>
+
+    <div class="row">
+      <div>
+        <label for="price">Price (₹):</label>
+        <input id="price" type="number" required>
+      </div>
+      <div>
+        <label for="type">Washroom Type:</label>
+        <select id="type">
+          <option value="Western">Western</option>
+          <option value="Indian">Indian</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="open">Opening Time:</label>
+        <input id="open" type="time" required>
+      </div>
+      <div>
+        <label for="close">Closing Time:</label>
+        <input id="close" type="time" required>
+      </div>
+    </div>
+
+    <button type="submit">Submit Registration</button>
+
+  </form>
+
+  <script>
+    // Helper function to easily grab elements by their ID
+    const $ = (id) => document.getElementById(id);
+
+    // LOGIC: Show or hide the Business Name field based on the dropdown selection
+    $('host_category').addEventListener('change', (e) => {
+      if (e.target.value === 'commercial') {
+        $('business_div').hidden = false;
+      } else {
+        $('business_div').hidden = true;
+      }
+    });
+
+    // LOGIC: What happens when the user clicks "Submit"
+    $('f').addEventListener('submit', async (e) => {
+      e.preventDefault(); // Prevents the page from refreshing
+
+      // 1. Gather all the data from the form
+      const formData = {
+        host_category: $('host_category').value,
+        business_name: $('business_name').value.trim(),
+        name: $('name').value.trim(),
+        phone: $('phone').value.trim(),
+        pin: $('pin').value.trim(),
+        addr: $('addr').value.trim(),
+        price: Number($('price').value),
+        type: $('type').value,
+        open: $('open').value,
+        close: $('close').value
+      };
+
+      // 2. Simple check: If they are commercial, they MUST enter a business name
+      if (formData.host_category === 'commercial' && formData.business_name.length < 2) {
+        alert('Please enter your business or shop name.');
+        return;
+      }
+
+      // 3. For now, we print the data to the console so you can see it working
+      console.log("Data ready to be sent to your Supabase engine:", formData);
+      alert("Form works! The console has captured your data. Next step is linking this to your Supabase Javascript connection.");
+      
+      // Note: Your Supabase insert() JavaScript will go right here in the next phase.
+    });
+  </script>
+
+</body>
+</html>
