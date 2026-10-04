@@ -8,9 +8,11 @@
     body { font-family: sans-serif; padding: 20px; max-width: 500px; margin: auto; }
     label { font-weight: bold; margin-top: 10px; display: block; }
     input, select { width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 15px; box-sizing: border-box; }
-    button { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; font-size: 16px; cursor: pointer; }
+    button { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; font-size: 16px; cursor: pointer; margin-top: 10px; }
+    button:hover { background-color: #004494; }
     .row { display: flex; gap: 10px; }
     .row > div { flex: 1; }
+    #status-msg { margin-top: 15px; font-weight: bold; text-align: center; }
   </style>
 </head>
 <body>
@@ -19,20 +21,17 @@
   
   <form id="f" novalidate>
     
-    <!-- Host Category Selection -->
     <label for="host_category">I am registering as a:</label>
     <select id="host_category">
       <option value="residential">Residential Host (Private Home)</option>
       <option value="commercial">Commercial Host (Shop, Cafe, Petrol Pump)</option>
     </select>
 
-    <!-- Business Name (Hidden by default) -->
     <div id="business_div" hidden>
       <label for="business_name">Business/Shop Name:</label>
       <input id="business_name" type="text" placeholder="e.g., Sharma Sweets, Highway Cafe">
     </div>
 
-    <!-- Personal Details -->
     <label for="name">Your full name:</label>
     <input id="name" type="text" autocomplete="name" required>
 
@@ -47,7 +46,6 @@
       </div>
     </div>
 
-    <!-- Washroom Details -->
     <label for="addr">Full Address:</label>
     <input id="addr" type="text" required>
 
@@ -76,28 +74,36 @@
       </div>
     </div>
 
-    <button type="submit">Submit Registration</button>
+    <button type="submit" id="submit-btn">Submit Registration</button>
+    <div id="status-msg"></div>
 
   </form>
 
+  <!-- Supabase Library -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
   <script>
-    // Helper function to easily grab elements by their ID
-    const $ = (id) => document.getElementById(id);
+    // Initialize Supabase Connection
+    const SUPABASE_URL = 'https://uyypecjfolryxmrxyerj.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV5eXBlY2pmb2xyeXhtcnh5ZXJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMDQ0MzQsImV4cCI6MjEwNjY4MDQzNH0.eKmcvnL_s29ulbi5_lLtMVUL0k2wxPqu-27404yoSTI';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // LOGIC: Show or hide the Business Name field based on the dropdown selection
-    $('host_category').addEventListener('change', (e) => {
-      if (e.target.value === 'commercial') {
-        $('business_div').hidden = false;
-      } else {
-        $('business_div').hidden = true;
-      }
+    const $ = (id) => document.getElementById(id);
+    const statusMsg = $('status-msg');
+
+    // Toggle business name field
+    $('host_category').addEventListener('change', (e) => {$('business_div').hidden = (e.target.value !== 'commercial');
     });
 
-    // LOGIC: What happens when the user clicks "Submit"
+    // Form submission to database
     $('f').addEventListener('submit', async (e) => {
-      e.preventDefault(); // Prevents the page from refreshing
+      e.preventDefault(); 
+      
+      const submitBtn = $('submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.innerText = "Saving to database...";
+      statusMsg.innerText = "";
 
-      // 1. Gather all the data from the form
       const formData = {
         host_category: $('host_category').value,
         business_name: $('business_name').value.trim(),
@@ -111,17 +117,31 @@
         close: $('close').value
       };
 
-      // 2. Simple check: If they are commercial, they MUST enter a business name
       if (formData.host_category === 'commercial' && formData.business_name.length < 2) {
-        alert('Please enter your business or shop name.');
+        statusMsg.innerText = 'Please enter your business or shop name.';
+        statusMsg.style.color = 'red';
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Submit Registration";
         return;
       }
 
-      // 3. For now, we print the data to the console so you can see it working
-      console.log("Data ready to be sent to your Supabase engine:", formData);
-      alert("Form works! The console has captured your data. Next step is linking this to your Supabase Javascript connection.");
-      
-      // Note: Your Supabase insert() JavaScript will go right here in the next phase.
+      // Insert data into Supabase
+      const { data, error } = await supabaseClient
+        .from('listings')
+        .insert([formData]);
+
+      if (error) {
+        statusMsg.innerText = `Error: ${error.message}`;
+        statusMsg.style.color = 'red';
+        console.error(error);
+      } else {
+        statusMsg.innerText = "Success! Washroom registered.";
+        statusMsg.style.color = 'green';
+        $('f').reset();$('business_div').hidden = true;
+      }
+
+      submitBtn.disabled = false;
+      submitBtn.innerText = "Submit Registration";
     });
   </script>
 
