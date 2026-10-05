@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Host Registration - Washroom Platform</title>
+  
+  <!-- Leaflet CSS for Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 550px; margin: auto; background-color: #f4f7f6; }
     form { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
@@ -20,6 +24,10 @@
     .checkbox-label input { margin-right: 5px; }
 
     .file-note { font-size: 12px; color: #666; margin-top: 2px; display: block; }
+    
+    /* Map Styling */
+    #map { width: 100%; height: 250px; margin-top: 10px; border-radius: 4px; border: 1px solid #ccc; }
+    .map-instructions { font-size: 12px; color: #0056b3; margin-top: 5px; display: block; font-weight: bold; }
 
     button { width: 100%; padding: 14px; background-color: #0056b3; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; margin-top: 20px; font-weight: bold; }
     button:hover { background-color: #004494; }
@@ -52,12 +60,17 @@
       </div>
       <div>
         <label for="pin">PIN code:</label>
-        <input id="pin" type="text" inputmode="numeric" maxlength="6" required>
+        <input id="pin" type="text" inputmode="numeric" maxlength="6" placeholder="e.g. 741251" required>
       </div>
     </div>
 
     <label for="addr">Full Address:</label>
-    <input id="addr" type="text" required>
+    <input id="addr" type="text" placeholder="House/Shop No, Street, Landmark" required>
+
+    <!-- INTERACTIVE MAP SECTION -->
+    <label>Pinpoint Your Location on Map:</label>
+    <span class="map-instructions">Type your PIN code or address above to auto-locate, or click directly on the map to place your pin.</span>
+    <div id="map"></div>
 
     <div class="row">
       <div>
@@ -99,21 +112,22 @@
       <label class="checkbox-label"><input type="checkbox" name="facilities" value="Wheelchair Accessible"> Wheelchair</label>
     </div>
 
-    <!-- PHOTO UPLOAD SECTIONS -->
-    <label for="host_photo">1. Host Photo (Your Portrait):</label>
+    <label for="host_photo">Host Photo (Your Portrait):</label>
     <input type="file" id="host_photo" accept="image/*" required>
     <span class="file-note">Upload a clear photo of yourself.</span>
 
-    <label for="property_photos">2. Property & Washroom Photos (Inside/Outside):</label>
+    <label for="property_photos">Property & Washroom Photos (Inside/Outside):</label>
     <input type="file" id="property_photos" accept="image/*" multiple required>
-    <span class="file-note">You can select multiple images (washroom inside, outside, entrance).</span>
+    <span class="file-note">Select multiple images (washroom inside, outside, entrance).</span>
 
     <button type="submit" id="submit-btn">Submit Registration</button>
     <div id="status-msg"></div>
 
   </form>
 
+  <!-- Supabase & Leaflet JS Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   
   <script>
     const SUPABASE_URL = 'https://uyypecjfolryxmrxyerj.supabase.co';
@@ -122,6 +136,56 @@
 
     const $ = (id) => document.getElementById(id);
     const statusMsg = $('status-msg');
+
+    // --- MAP INITIALIZATION ---
+    // Default center set to Kalyani, West Bengal (or central India fallback)
+    let selectedLat = 22.9868;
+    let selectedLng = 88.4326;
+
+    const map = L.map('map').setView([selectedLat, selectedLng], 13);
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    let marker = L.marker([selectedLat, selectedLng], { draggable: true }).addTo(map);
+
+    // Update coordinates when marker is dragged
+    marker.on('dragend', function (e) {
+      const pos = marker.getLatLng();
+      selectedLat = pos.lat;
+      selectedLng = pos.lng;
+    });
+
+    // Update coordinates when map is clicked
+    map.on('click', function (e) {
+      selectedLat = e.latlng.lat;
+      selectedLng = e.latlng.lng;
+      marker.setLatLng([selectedLat, selectedLng]);
+    });
+
+    // Automatically search location when PIN code reaches 6 digits
+    $('pin').addEventListener('blur', async () => {
+      const pin = $('pin').value.trim();
+      const addr = $('addr').value.trim();
+      if (pin.length === 6) {
+        try {
+          const query = encodeURIComponent(`${addr}, PIN ${pin}, India`);
+          const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`);
+          const data = await response.json();
+          
+          if (data && data.length > 0) {
+            selectedLat = parseFloat(data[0].lat);
+            selectedLng = parseFloat(data[0].lon);
+            map.setView([selectedLat, selectedLng], 15);
+            marker.setLatLng([selectedLat, selectedLng]);
+          }
+        } catch (err) {
+          console.error("Geocoding lookup failed:", err);
+        }
+      }
+    });
 
     $('host_category').addEventListener('change', (e) => {$('business_div').hidden = (e.target.value !== 'commercial');
     });
@@ -163,7 +227,7 @@
           .from('washroom-media')
           .getPublicUrl(hostFileName);
 
-        // 2. Upload Property / Washroom Photos (Multiple)
+        // 2. Upload Property Photos
         submitBtn.innerText = "Uploading property photos...";
         const propertyFiles = $('property_photos').files;
         if (propertyFiles.length === 0) throw new Error("Please upload at least one property/washroom photo.");
@@ -187,12 +251,11 @@
           propertyPhotoUrls.push(propPublicUrlData.publicUrl);
         }
 
-        // 3. Gather Facilities Checkboxes
         submitBtn.innerText = "Saving listing details...";
         const facilityCheckboxes = document.querySelectorAll('input[name="facilities"]:checked');
         const facilitiesArray = Array.from(facilityCheckboxes).map(cb => cb.value);
 
-        // 4. Construct Final Data Payload
+        // 3. Construct Final Data Payload including Map Coordinates
         const formData = {
           host_category: $('host_category').value,
           business_name: $('business_name').value.trim(),
@@ -209,6 +272,10 @@
           host_photo_url: hostPublicUrlData.publicUrl,
           property_photos: propertyPhotoUrls,
           
+          // Map Latitude & Longitude saved here
+          lat: selectedLat,
+          lng: selectedLng,
+          
           host_id: user.id,            
           kyc_verified: false,         
           status: 'pending'            
@@ -218,14 +285,13 @@
           throw new Error('Please enter your business or shop name.');
         }
 
-        // 5. Insert into Database
         const { error: dbError } = await supabaseClient
           .from('listings')
           .insert([formData]);
 
         if (dbError) throw dbError;
 
-        statusMsg.innerText = "Success! Washroom & photos registered for review.";
+        statusMsg.innerText = "Success! Washroom & map location registered.";
         statusMsg.style.color = 'green';
         $('f').reset();$('business_div').hidden = true;
 
