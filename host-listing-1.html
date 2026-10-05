@@ -112,13 +112,14 @@
       <label class="checkbox-label"><input type="checkbox" name="facilities" value="Wheelchair Accessible"> Wheelchair</label>
     </div>
 
-    <label for="host_photo">Host Photo (Your Portrait):</label>
-    <input type="file" id="host_photo" accept="image/*" required>
-    <span class="file-note">Upload a clear photo of yourself.</span>
+    <!-- LIVE CAMERA CAPTURE UPLOAD SECTIONS -->
+    <label for="host_photo">Host Photo (Take Live Selfie):</label>
+    <input type="file" id="host_photo" accept="image/*" capture="user" required>
+    <span class="file-note">Take a live photo of yourself.</span>
 
-    <label for="property_photos">Property & Washroom Photos (Inside/Outside):</label>
-    <input type="file" id="property_photos" accept="image/*" multiple required>
-    <span class="file-note">Select multiple images (washroom inside, outside, entrance).</span>
+    <label for="property_photos">Property & Washroom Photos (Capture Live):</label>
+    <input type="file" id="property_photos" accept="image/*" capture="environment" multiple required>
+    <span class="file-note">Take live photos of the inside and outside of the washroom.</span>
 
     <button type="submit" id="submit-btn">Submit Registration</button>
     <div id="status-msg"></div>
@@ -138,7 +139,6 @@
     const statusMsg = $('status-msg');
 
     // --- MAP INITIALIZATION ---
-    // Default center set to Kalyani, West Bengal (or central India fallback)
     let selectedLat = 22.9868;
     let selectedLng = 88.4326;
 
@@ -272,7 +272,6 @@
           host_photo_url: hostPublicUrlData.publicUrl,
           property_photos: propertyPhotoUrls,
           
-          // Map Latitude & Longitude saved here
           lat: selectedLat,
           lng: selectedLng,
           
