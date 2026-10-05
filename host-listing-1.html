@@ -9,16 +9,17 @@
     form { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     h2 { color: #0056b3; margin-top: 0; text-align: center; }
     label { font-weight: bold; margin-top: 15px; display: block; font-size: 14px; }
-    input[type="text"], input[type="tel"], input[type="number"], input[type="time"], select { 
+    input[type="text"], input[type="tel"], input[type="number"], input[type="time"], select, input[type="file"] { 
       width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; 
     }
     .row { display: flex; gap: 15px; }
     .row > div { flex: 1; }
     
-    /* Checkbox Styling */
     .checkbox-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
     .checkbox-label { font-weight: normal; display: flex; align-items: center; font-size: 14px; margin-top: 0;}
     .checkbox-label input { margin-right: 5px; }
+
+    .file-note { font-size: 12px; color: #666; margin-top: 2px; display: block; }
 
     button { width: 100%; padding: 14px; background-color: #0056b3; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; margin-top: 20px; font-weight: bold; }
     button:hover { background-color: #004494; }
@@ -83,13 +84,12 @@
       </div>
     </div>
 
-    <!-- NEW DETAILED FIELDS -->
     <label for="who">Who can use this washroom?</label>
     <select id="who">
-  <option value="All">Anyone (Unisex)</option>
-  <option value="Men only">Men Only</option>
-  <option value="Women only">Women Only</option>
-</select>
+      <option value="All">Anyone (Unisex)</option>
+      <option value="Men only">Men Only</option>
+      <option value="Women only">Women Only</option>
+    </select>
 
     <label>Available Facilities:</label>
     <div class="checkbox-group">
@@ -99,12 +99,20 @@
       <label class="checkbox-label"><input type="checkbox" name="facilities" value="Wheelchair Accessible"> Wheelchair</label>
     </div>
 
+    <!-- PHOTO UPLOAD SECTIONS -->
+    <label for="host_photo">1. Host Photo (Your Portrait):</label>
+    <input type="file" id="host_photo" accept="image/*" required>
+    <span class="file-note">Upload a clear photo of yourself.</span>
+
+    <label for="property_photos">2. Property & Washroom Photos (Inside/Outside):</label>
+    <input type="file" id="property_photos" accept="image/*" multiple required>
+    <span class="file-note">You can select multiple images (washroom inside, outside, entrance).</span>
+
     <button type="submit" id="submit-btn">Submit Registration</button>
     <div id="status-msg"></div>
 
   </form>
 
-  <!-- Supabase Library -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
   <script>
@@ -123,7 +131,7 @@
       
       const submitBtn = $('submit-btn');
       submitBtn.disabled = true;
-      submitBtn.innerText = "Saving to database...";
+      submitBtn.innerText = "Authenticating & Checking...";
       statusMsg.innerText = "";
 
       const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
@@ -136,52 +144,95 @@
         return;
       }
 
-      // Gather all checked facilities into a standard array format
-      const facilityCheckboxes = document.querySelectorAll('input[name="facilities"]:checked');
-      const facilitiesArray = Array.from(facilityCheckboxes).map(cb => cb.value);
-
-      const formData = {
-        host_category: $('host_category').value,
-        business_name: $('business_name').value.trim(),
-        name: $('name').value.trim(),
-        phone: $('phone').value.trim(),
-        pin: $('pin').value.trim(),
-        addr: $('addr').value.trim(),
-        price: Number($('price').value),
-        type: $('type').value,
-        open: $('open').value,
-        close: $('close').value,
+      try {
+        // 1. Upload Host Photo
+        submitBtn.innerText = "Uploading host photo...";
+        const hostPhotoFile = $('host_photo').files[0];
+        if (!hostPhotoFile) throw new Error("Please upload your host photo.");
         
-        // Pulled directly from the new UI inputs
-        who: $('who').value,
-        facilities: facilitiesArray, 
+        const hostFileExt = hostPhotoFile.name.split('.').pop();
+        const hostFileName = `${user.id}/host_${Date.now()}.${hostFileExt}`;
         
-        // Administrative defaults
-        host_id: user.id,            
-        kyc_verified: false,         
-        status: 'pending'            
-      };
+        const { error: hostUploadError } = await supabaseClient.storage
+          .from('washroom-media')
+          .upload(hostFileName, hostPhotoFile);
+          
+        if (hostUploadError) throw hostUploadError;
 
-      if (formData.host_category === 'commercial' && formData.business_name.length < 2) {
-        statusMsg.innerText = 'Please enter your business or shop name.';
-        statusMsg.style.color = 'red';
-        submitBtn.disabled = false;
-        submitBtn.innerText = "Submit Registration";
-        return;
-      }
+        const { data: hostPublicUrlData } = supabaseClient.storage
+          .from('washroom-media')
+          .getPublicUrl(hostFileName);
 
-      const { data, error } = await supabaseClient
-        .from('listings')
-        .insert([formData]);
+        // 2. Upload Property / Washroom Photos (Multiple)
+        submitBtn.innerText = "Uploading property photos...";
+        const propertyFiles = $('property_photos').files;
+        if (propertyFiles.length === 0) throw new Error("Please upload at least one property/washroom photo.");
 
-      if (error) {
-        statusMsg.innerText = `Database Error: ${error.message}`;
-        statusMsg.style.color = 'red';
-        console.error(error);
-      } else {
-        statusMsg.innerText = "Success! Washroom registered for review.";
+        let propertyPhotoUrls = [];
+        for (let i = 0; i < propertyFiles.length; i++) {
+          const file = propertyFiles[i];
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${user.id}/property_${Date.now()}_${i}.${fileExt}`;
+
+          const { error: propUploadError } = await supabaseClient.storage
+            .from('washroom-media')
+            .upload(fileName, file);
+
+          if (propUploadError) throw propUploadError;
+
+          const { data: propPublicUrlData } = supabaseClient.storage
+            .from('washroom-media')
+            .getPublicUrl(fileName);
+
+          propertyPhotoUrls.push(propPublicUrlData.publicUrl);
+        }
+
+        // 3. Gather Facilities Checkboxes
+        submitBtn.innerText = "Saving listing details...";
+        const facilityCheckboxes = document.querySelectorAll('input[name="facilities"]:checked');
+        const facilitiesArray = Array.from(facilityCheckboxes).map(cb => cb.value);
+
+        // 4. Construct Final Data Payload
+        const formData = {
+          host_category: $('host_category').value,
+          business_name: $('business_name').value.trim(),
+          name: $('name').value.trim(),
+          phone: $('phone').value.trim(),
+          pin: $('pin').value.trim(),
+          addr: $('addr').value.trim(),
+          price: Number($('price').value),
+          type: $('type').value,
+          open: $('open').value,
+          close: $('close').value,
+          who: $('who').value,
+          facilities: facilitiesArray,
+          host_photo_url: hostPublicUrlData.publicUrl,
+          property_photos: propertyPhotoUrls,
+          
+          host_id: user.id,            
+          kyc_verified: false,         
+          status: 'pending'            
+        };
+
+        if (formData.host_category === 'commercial' && formData.business_name.length < 2) {
+          throw new Error('Please enter your business or shop name.');
+        }
+
+        // 5. Insert into Database
+        const { error: dbError } = await supabaseClient
+          .from('listings')
+          .insert([formData]);
+
+        if (dbError) throw dbError;
+
+        statusMsg.innerText = "Success! Washroom & photos registered for review.";
         statusMsg.style.color = 'green';
         $('f').reset();$('business_div').hidden = true;
+
+      } catch (err) {
+        statusMsg.innerText = `Error: ${err.message}`;
+        statusMsg.style.color = 'red';
+        console.error(err);
       }
 
       submitBtn.disabled = false;
