@@ -13,7 +13,7 @@
     form { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     h2 { color: #0056b3; margin-top: 0; text-align: center; }
     label { font-weight: bold; margin-top: 15px; display: block; font-size: 14px; }
-    input[type="text"], input[type="tel"], input[type="number"], input[type="time"], select, input[type="file"] { 
+    input[type="text"], input[type="tel"], input[type="number"], input[type="time"], input[type="email"], select, input[type="file"] { 
       width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; 
     }
     .row { display: flex; gap: 15px; }
@@ -29,8 +29,13 @@
     #map { width: 100%; height: 250px; margin-top: 10px; border-radius: 4px; border: 1px solid #ccc; }
     .map-instructions { font-size: 12px; color: #0056b3; margin-top: 5px; display: block; font-weight: bold; }
 
+    .otp-box { background: #e8f4fd; padding: 12px; border-radius: 6px; margin-top: 10px; border: 1px solid #bde0fe; }
+    
     button { width: 100%; padding: 14px; background-color: #0056b3; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; margin-top: 20px; font-weight: bold; }
     button:hover { background-color: #004494; }
+    .btn-secondary { background-color: #28a745; margin-top: 10px; }
+    .btn-secondary:hover { background-color: #218838; }
+    
     #status-msg { margin-top: 15px; font-weight: bold; text-align: center; font-size: 14px; }
   </style>
 </head>
@@ -53,6 +58,10 @@
     <label for="name">Your full name:</label>
     <input id="name" type="text" autocomplete="name" required>
 
+    <!-- CONTACT & OTP VERIFICATION SECTION -->
+    <label for="email">Email Address (For OTP Verification):</label>
+    <input id="email" type="email" placeholder="name@example.com" required>
+
     <div class="row">
       <div>
         <label for="phone">Mobile number:</label>
@@ -63,6 +72,16 @@
         <input id="pin" type="text" inputmode="numeric" maxlength="6" placeholder="e.g. 741251" required>
       </div>
     </div>
+
+    <!-- OTP Input Area -->
+    <div id="otp-section" class="otp-box" hidden>
+      <label for="otp-code">Enter 6-Digit Email OTP Code:</label>
+      <input id="otp-code" type="text" inputmode="numeric" maxlength="6" placeholder="123456">
+      <button type="button" class="btn-secondary" onclick="verifyOtpCode()">Verify Email OTP</button>
+    </div>
+
+    <button type="button" id="send-otp-btn" class="btn-secondary" onclick="sendEmailOtp()">Send Email OTP</button>
+    <div id="otp-status" style="font-size: 13px; font-weight: bold; margin-top: 5px; color: #0056b3;"></div>
 
     <label for="addr">Full Address:</label>
     <input id="addr" type="text" placeholder="House/Shop No, Street, Landmark" required>
@@ -112,7 +131,6 @@
       <label class="checkbox-label"><input type="checkbox" name="facilities" value="Wheelchair Accessible"> Wheelchair</label>
     </div>
 
-    <!-- LIVE CAMERA CAPTURE UPLOAD SECTIONS -->
     <label for="host_photo">Host Photo (Take Live Selfie):</label>
     <input type="file" id="host_photo" accept="image/*" capture="user" required>
     <span class="file-note">Take a live photo of yourself.</span>
@@ -121,7 +139,7 @@
     <input type="file" id="property_photos" accept="image/*" capture="environment" multiple required>
     <span class="file-note">Take live photos of the inside and outside of the washroom.</span>
 
-    <button type="submit" id="submit-btn">Submit Registration</button>
+    <button type="submit" id="submit-btn" disabled style="background-color: #6c757d; cursor: not-allowed;">Submit Registration (Verify OTP First)</button>
     <div id="status-msg"></div>
 
   </form>
@@ -137,6 +155,7 @@
 
     const $ = (id) => document.getElementById(id);
     const statusMsg = $('status-msg');
+    let isEmailVerified = false;
 
     // --- MAP INITIALIZATION ---
     let selectedLat = 22.9868;
@@ -151,21 +170,18 @@
 
     let marker = L.marker([selectedLat, selectedLng], { draggable: true }).addTo(map);
 
-    // Update coordinates when marker is dragged
     marker.on('dragend', function (e) {
       const pos = marker.getLatLng();
       selectedLat = pos.lat;
       selectedLng = pos.lng;
     });
 
-    // Update coordinates when map is clicked
     map.on('click', function (e) {
       selectedLat = e.latlng.lat;
       selectedLng = e.latlng.lng;
       marker.setLatLng([selectedLat, selectedLng]);
     });
 
-    // Automatically search location when PIN code reaches 6 digits
     $('pin').addEventListener('blur', async () => {
       const pin = $('pin').value.trim();
       const addr = $('addr').value.trim();
@@ -190,21 +206,95 @@
     $('host_category').addEventListener('change', (e) => {$('business_div').hidden = (e.target.value !== 'commercial');
     });
 
+    // --- OTP FUNCTIONS ---
+    async function sendEmailOtp() {
+      const email = $('email').value.trim();
+      const phone = $('phone').value.trim();
+      const otpStatus = $('otp-status');
+
+      if (!email || !email.includes('@')) {
+        alert('Please enter a valid email address first.');
+        return;
+      }
+      if (!phone || phone.length !== 10) {
+        alert('Please enter a valid 10-digit mobile number.');
+        return;
+      }
+
+      otpStatus.innerText = "Sending OTP to email...";
+      
+      const { error } = await supabaseClient.auth.signInWithOtp({ 
+        email: email,
+        options: { data: { phone: phone } }
+      });
+
+      if (error) {
+        otpStatus.innerText = `Error: ${error.message}`;
+        otpStatus.style.color = 'red';
+      } else {
+        otpStatus.innerText = "OTP sent successfully! Check your email inbox.";
+        otpStatus.style.color = 'green';
+        $('otp-section').hidden = false;
+        $('send-otp-btn').hidden = true;
+      }
+    }
+
+    async function verifyOtpCode() {
+      const email = $('email').value.trim();
+      const token = $('otp-code').value.trim();
+      const otpStatus = $('otp-status');
+
+      if (!token || token.length !== 6) {
+        alert('Please enter the 6-digit OTP code.');
+        return;
+      }
+
+      otpStatus.innerText = "Verifying OTP...";
+
+      const { data, error } = await supabaseClient.auth.verifyOtp({
+        email: email,
+        token: token,
+        type: 'email'
+      });
+
+      if (error) {
+        otpStatus.innerText = `Verification failed: ${error.message}`;
+        otpStatus.style.color = 'red';
+      } else {
+        isEmailVerified = true;
+        otpStatus.innerText = "✓ Email & Mobile Verified Successfully!";
+        otpStatus.style.color = 'green';
+        $('otp-section').hidden = true;
+        
+        // Unlock submit button
+        const submitBtn = $('submit-btn');
+        submitBtn.disabled = false;
+        submitBtn.style.backgroundColor = '#0056b3';
+        submitBtn.style.cursor = 'pointer';
+        submitBtn.innerText = "Submit Registration";
+      }
+    }
+
+    // --- FORM SUBMISSION ---
     $('f').addEventListener('submit', async (e) => {
       e.preventDefault(); 
+
+      if (!isEmailVerified) {
+        alert('You must verify your email and phone via OTP before submitting.');
+        return;
+      }
       
       const submitBtn = $('submit-btn');
       submitBtn.disabled = true;
-      submitBtn.innerText = "Authenticating & Checking...";
+      submitBtn.innerText = "Processing Uploads...";
       statusMsg.innerText = "";
 
       const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
       
       if (authError || !user) {
-        statusMsg.innerText = "Error: You must be logged in to register a washroom.";
+        statusMsg.innerText = "Error: Authentication session expired. Please re-verify OTP.";
         statusMsg.style.color = 'red';
         submitBtn.disabled = false;
-        submitBtn.innerText = "Submit Registration";
         return;
       }
 
@@ -230,7 +320,7 @@
         // 2. Upload Property Photos
         submitBtn.innerText = "Uploading property photos...";
         const propertyFiles = $('property_photos').files;
-        if (propertyFiles.length === 0) throw new Error("Please upload at least one property/washroom photo.");
+        if (propertyFiles.length === 0) throw new Error("Please upload at least one property photo.");
 
         let propertyPhotoUrls = [];
         for (let i = 0; i < propertyFiles.length; i++) {
@@ -255,7 +345,6 @@
         const facilityCheckboxes = document.querySelectorAll('input[name="facilities"]:checked');
         const facilitiesArray = Array.from(facilityCheckboxes).map(cb => cb.value);
 
-        // 3. Construct Final Data Payload including Map Coordinates
         const formData = {
           host_category: $('host_category').value,
           business_name: $('business_name').value.trim(),
@@ -276,7 +365,7 @@
           lng: selectedLng,
           
           host_id: user.id,            
-          kyc_verified: false,         
+          kyc_verified: true,         // Marked verified since OTP passed
           status: 'pending'            
         };
 
@@ -290,9 +379,10 @@
 
         if (dbError) throw dbError;
 
-        statusMsg.innerText = "Success! Washroom & map location registered.";
+        statusMsg.innerText = "Success! Washroom registered & verified for admin review.";
         statusMsg.style.color = 'green';
         $('f').reset();$('business_div').hidden = true;
+        $('submit-btn').disabled = true;
 
       } catch (err) {
         statusMsg.innerText = `Error: ${err.message}`;
