@@ -31,6 +31,11 @@
 
     .verification-box { background: #e8f4fd; padding: 12px; border-radius: 6px; margin-top: 10px; border: 1px solid #bde0fe; }
     
+    /* Legal Warning Box */
+    .warning-box { background: #fff3f3; border: 1px solid #ff6b6b; padding: 15px; border-radius: 6px; margin-top: 20px; color: #721c24; }
+    .warning-box h4 { margin: 0 0 8px 0; color: #d9534f; font-size: 15px; }
+    .warning-box ul { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.5; }
+
     button { width: 100%; padding: 14px; background-color: #0056b3; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; margin-top: 20px; font-weight: bold; }
     button:hover { background-color: #004494; }
     .btn-action { background-color: #28a745; margin-top: 8px; padding: 10px; font-size: 14px; }
@@ -134,7 +139,17 @@
     <input type="file" id="property_photos" accept="image/*" capture="environment" multiple required>
     <span class="file-note">Take live photos of the inside and outside of the washroom.</span>
 
-    <button type="submit" id="submit-btn" disabled style="background-color: #6c757d; cursor: not-allowed; margin-top: 25px;">Submit Registration (Complete Verification First)</button>
+    <!-- STRICT LEGAL PRIVACY WARNING BOX -->
+    <div class="warning-box">
+      <h4>⚠️ Strict Privacy & Legal Warning</h4>
+      <ul>
+        <li><b>Zero Surveillance Policy:</b> Installing hidden cameras, recording devices, or any form of electronic/mobile surveillance inside the washroom or changing area is strictly prohibited.</li>
+        <li><b>Criminal Liability:</b> Any violation of guest privacy or unauthorized recording is a severe criminal offense under Indian law.</li>
+        <li><b>Severe Consequences:</b> Violations will lead to immediate platform bans, formal <b>FIR registration, police arrest, and strict legal prosecution</b> for harassment and breach of privacy.</li>
+      </ul>
+    </div>
+
+    <button type="submit" id="submit-btn" disabled style="background-color: #6c757d; cursor: not-allowed; margin-top: 20px;">Submit Registration (Complete Verification First)</button>
     <div id="status-msg"></div>
 
   </form>
@@ -154,7 +169,6 @@
     let isEmailVerified = false;
     let isPhoneVerified = false;
 
-    // Check if user just returned from clicking the Email Magic Link
     async function checkAuthSession() {
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (session) {
@@ -168,7 +182,6 @@
     }
     checkAuthSession();
 
-    // --- MAP INITIALIZATION ---
     let selectedLat = 22.9868;
     let selectedLng = 88.4326;
 
@@ -217,7 +230,6 @@
     $('host_category').addEventListener('change', (e) => {$('business_div').hidden = (e.target.value !== 'commercial');
     });
 
-    // --- 1. SEND MAGIC LINK TO EMAIL ---
     async function sendMagicLink() {
       const email = $('email').value.trim();
       const emailStatus = $('email-status');
@@ -244,7 +256,6 @@
       }
     }
 
-    // --- 2. MOBILE NUMBER VERIFICATION ---
     function verifyPhoneManual() {
       const phone = $('phone').value.trim();
       const phoneStatus = $('phone-status');
@@ -262,7 +273,6 @@
       checkMasterUnlock();
     }
 
-    // --- MASTER UNLOCK SUBMIT BUTTON ---
     function checkMasterUnlock() {
       if (isEmailVerified && isPhoneVerified) {
         const submitBtn = $('submit-btn');
@@ -273,124 +283,5 @@
       }
     }
 
-    // --- FORM SUBMISSION ---
-    $('f').addEventListener('submit', async (e) => {
-      e.preventDefault(); 
-
-      if (!isEmailVerified || !isPhoneVerified) {
-        alert('You must verify your email via the link and your mobile number before submitting.');
-        return;
-      }
+    $('f').addEventListener('submit', async (
       
-      const submitBtn = $('submit-btn');
-      submitBtn.disabled = true;
-      submitBtn.innerText = "Processing Uploads & Saving...";
-      statusMsg.innerText = "";
-
-      const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-      
-      if (authError || !user) {
-        statusMsg.innerText = "Error: Authentication session expired. Please re-click your email magic link.";
-        statusMsg.style.color = 'red';
-        submitBtn.disabled = false;
-        return;
-      }
-
-      try {
-        // 1. Upload Host Photo
-        submitBtn.innerText = "Uploading host photo...";
-        const hostPhotoFile = $('host_photo').files[0];
-        if (!hostPhotoFile) throw new Error("Please upload your host photo.");
-        
-        const hostFileExt = hostPhotoFile.name.split('.').pop();
-        const hostFileName = `${user.id}/host_${Date.now()}.${hostFileExt}`;
-        
-        const { error: hostUploadError } = await supabaseClient.storage
-          .from('washroom-media')
-          .upload(hostFileName, hostPhotoFile);
-          
-        if (hostUploadError) throw hostUploadError;
-
-        const { data: hostPublicUrlData } = supabaseClient.storage
-          .from('washroom-media')
-          .getPublicUrl(hostFileName);
-
-        // 2. Upload Property Photos
-        submitBtn.innerText = "Uploading property photos...";
-        const propertyFiles = $('property_photos').files;
-        if (propertyFiles.length === 0) throw new Error("Please upload at least one property photo.");
-
-        let propertyPhotoUrls = [];
-        for (let i = 0; i < propertyFiles.length; i++) {
-          const file = propertyFiles[i];
-          const fileExt = file.name.split('.').pop();
-          const fileName = `${user.id}/property_${Date.now()}_${i}.${fileExt}`;
-
-          const { error: propUploadError } = await supabaseClient.storage
-            .from('washroom-media')
-            .upload(fileName, file);
-
-          if (propUploadError) throw propUploadError;
-
-          const { data: propPublicUrlData } = supabaseClient.storage
-            .from('washroom-media')
-            .getPublicUrl(fileName);
-
-          propertyPhotoUrls.push(propPublicUrlData.publicUrl);
-        }
-
-        submitBtn.innerText = "Saving listing details...";
-        const facilityCheckboxes = document.querySelectorAll('input[name="facilities"]:checked');
-        const facilitiesArray = Array.from(facilityCheckboxes).map(cb => cb.value);
-
-        const formData = {
-          host_category: $('host_category').value,
-          business_name: $('business_name').value.trim(),
-          name: $('name').value.trim(),
-          phone: $('phone').value.trim(),
-          pin: $('pin').value.trim(),
-          addr: $('addr').value.trim(),
-          price: Number($('price').value),
-          type: $('type').value,
-          open: $('open').value,
-          close: $('close').value,
-          who: $('who').value,
-          facilities: facilitiesArray,
-          host_photo_url: hostPublicUrlData.publicUrl,
-          property_photos: propertyPhotoUrls,
-          
-          lat: selectedLat,
-          lng: selectedLng,
-          
-          host_id: user.id,            
-          kyc_verified: true,         
-          status: 'pending'            
-        };
-
-        if (formData.host_category === 'commercial' && formData.business_name.length < 2) {
-          throw new Error('Please enter your business or shop name.');
-        }
-
-        const { error: dbError } = await supabaseClient
-          .from('listings')
-          .insert([formData]);
-
-        if (dbError) throw dbError;
-
-        statusMsg.innerText = "Success! Washroom registered and verified for admin review.";
-        statusMsg.style.color = 'green';
-        $('f').reset();$('business_div').hidden = true;
-        submitBtn.disabled = true;
-
-      } catch (err) {
-        statusMsg.innerText = `Error: ${err.message}`;
-        statusMsg.style.color = 'red';
-        console.error(err);
-        submitBtn.disabled = false;
-        submitBtn.innerText = "Submit Registration (Verified)";
-      }
-    });
-  </script>
-
-</body>
-</html>
