@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 550px; margin: auto; background-color: #f4f7f6; }
+    body { font-family: sans-serif; padding: 20px; max-width: 550px; margin: auto; background-color: #f4f7f6; line-height: 1.5; }
     form { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     h2 { color: #0056b3; margin-top: 0; text-align: center; }
     label { font-weight: bold; margin-top: 15px; display: block; font-size: 14px; }
@@ -42,6 +42,14 @@
     .btn-action:hover { background-color: #218838; }
     
     #status-msg { margin-top: 15px; font-weight: bold; text-align: center; font-size: 14px; }
+
+    /* Standard Professional Website Footer */
+    footer { background: #1a1a1a; color: #bbb; padding: 40px 20px 20px 20px; margin-top: 50px; font-size: 13px; border-top: 4px solid #0056b3; border-radius: 8px; }
+    .footer-grid { display: grid; grid-template-columns: 1fr; gap: 25px; margin-bottom: 25px; }
+    footer h4 { color: #fff; margin-bottom: 10px; font-size: 15px; border-bottom: 2px solid #0056b3; padding-bottom: 5px; display: inline-block; }
+    footer p, footer li { margin-bottom: 6px; }
+    footer ul { padding-left: 15px; }
+    .footer-bottom { text-align: center; border-top: 1px solid #333; padding-top: 15px; font-size: 12px; color: #888; }
   </style>
 </head>
 <body>
@@ -153,6 +161,31 @@
     <div id="status-msg"></div>
 
   </form>
+
+  <!-- Host Footer with Contact & Privacy Policy -->
+  <footer>
+    <div class="footer-grid">
+      <div>
+        <h4>Contact Us (Host Support)</h4>
+        <p>Need help with your listing or account verification? Reach out to our team:</p>
+        <p style="margin-top: 8px;">📧 Email: <a href="mailto:protaproy923460@gmail.com" style="color: #4dabf7; text-decoration: none; font-weight: bold;">protaproy923460@gmail.com</a></p>
+      </div>
+
+      <div>
+        <h4>Host Privacy Policy</h4>
+        <p><b>Effective Date:</b> October 2026</p>
+        <p>As a host on Easy Wash, your data and responsibilities are governed by our privacy terms:</p>
+        <ul>
+          <li><b>Host Data Usage:</b> Your contact info, live portraits, and property photos are utilized strictly for identity verification, admin approval, and guest navigation.</li>
+          <li><b>Location & GPS Integrity:</b> Pinpoints and addresses are used to display your washroom to guests within a 20 km search radius.</li>
+          <li><b>Strict Anti-Surveillance Terms:</b> Hosts agree not to install recording equipment. Any breach results in immediate platform blacklisting and legal reporting.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2026 Easy Wash Platform. Host Portal.</p>
+    </div>
+  </footer>
 
   <!-- Supabase & Leaflet JS Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -283,5 +316,121 @@
       }
     }
 
-    $('f').addEventListener('submit', async (
+    $('f').addEventListener('submit', async (e) => {
+      e.preventDefault(); 
+
+      if (!isEmailVerified || !isPhoneVerified) {
+        alert('You must verify your email via the link and your mobile number before submitting.');
+        return;
+      }
       
+      const submitBtn = $('submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.innerText = "Processing Uploads & Saving...";
+      statusMsg.innerText = "";
+
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+      
+      if (authError || !user) {
+        statusMsg.innerText = "Error: Authentication session expired. Please re-click your email magic link.";
+        statusMsg.style.color = 'red';
+        submitBtn.disabled = false;
+        return;
+      }
+
+      try {
+        submitBtn.innerText = "Uploading host photo...";
+        const hostPhotoFile = $('host_photo').files[0];
+        if (!hostPhotoFile) throw new Error("Please upload your host photo.");
+        
+        const hostFileExt = hostPhotoFile.name.split('.').pop();
+        const hostFileName = `${user.id}/host_${Date.now()}.${hostFileExt}`;
+        
+        const { error: hostUploadError } = await supabaseClient.storage
+          .from('washroom-media')
+          .upload(hostFileName, hostPhotoFile);
+          
+        if (hostUploadError) throw hostUploadError;
+
+        const { data: hostPublicUrlData } = supabaseClient.storage
+          .from('washroom-media')
+          .getPublicUrl(hostFileName);
+
+        submitBtn.innerText = "Uploading property photos...";
+        const propertyFiles = $('property_photos').files;
+        if (propertyFiles.length === 0) throw new Error("Please upload at least one property photo.");
+
+        let propertyPhotoUrls = [];
+        for (let i = 0; i < propertyFiles.length; i++) {
+          const file = propertyFiles[i];
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${user.id}/property_${Date.now()}_${i}.${fileExt}`;
+
+          const { error: propUploadError } = await supabaseClient.storage
+            .from('washroom-media')
+            .upload(fileName, file);
+
+          if (propUploadError) throw propUploadError;
+
+          const { data: propPublicUrlData } = supabaseClient.storage
+            .from('washroom-media')
+            .getPublicUrl(fileName);
+
+          propertyPhotoUrls.push(propPublicUrlData.publicUrl);
+        }
+
+        submitBtn.innerText = "Saving listing details...";
+        const facilityCheckboxes = document.querySelectorAll('input[name="facilities"]:checked');
+        const facilitiesArray = Array.from(facilityCheckboxes).map(cb => cb.value);
+
+        const formData = {
+          host_category: $('host_category').value,
+          business_name: $('business_name').value.trim(),
+          name: $('name').value.trim(),
+          phone: $('phone').value.trim(),
+          pin: $('pin').value.trim(),
+          addr: $('addr').value.trim(),
+          price: Number($('price').value),
+          type: $('type').value,
+          open: $('open').value,
+          close: $('close').value,
+          who: $('who').value,
+          facilities: facilitiesArray,
+          host_photo_url: hostPublicUrlData.publicUrl,
+          property_photos: propertyPhotoUrls,
+          
+          lat: selectedLat,
+          lng: selectedLng,
+          
+          host_id: user.id,            
+          kyc_verified: true,         
+          status: 'pending'            
+        };
+
+        if (formData.host_category === 'commercial' && formData.business_name.length < 2) {
+          throw new Error('Please enter your business or shop name.');
+        }
+
+        const { error: dbError } = await supabaseClient
+          .from('listings')
+          .insert([formData]);
+
+        if (dbError) throw dbError;
+
+        statusMsg.innerText = "Success! Washroom registered and verified for admin review.";
+        statusMsg.style.color = 'green';
+        $('f').reset();$('business_div').hidden = true;
+        submitBtn.disabled = true;
+
+      } catch (err) {
+        statusMsg.innerText = `Error: ${err.message}`;
+        statusMsg.style.color = 'red';
+        console.error(err);
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Submit Registration (Verified)";
+      }
+    });
+  </script>
+
+</body>
+</html>
